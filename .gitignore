@@ -1,0 +1,42 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Local machine/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Personal source material and class notes
+images/*
+!images/.gitkeep
+notes/
+class-notes/
+classes/
+screenshots/
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.key
+*.pages
+
+# Generated cheat sheet outputs
+cheatsheet.pdf
+cheatsheet-page-*.png
+output/
+exports/
+
+# Future web app dependencies/build output
+node_modules/
+dist/
+web/dist/
+web/test-results/
+web/playwright-report/
+
+# Local-only deployment notes
+GH_PAGES_DEPLOYMENT.md
