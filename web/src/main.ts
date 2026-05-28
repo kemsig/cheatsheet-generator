@@ -61,6 +61,8 @@ const PAPER_SIZES_IN: Record<PaperName, [number, number]> = {
 };
 
 const IMAGE_TYPES = new Set(["image/bmp", "image/gif", "image/jpeg", "image/png", "image/tiff", "image/webp"]);
+const IMAGE_EXTENSIONS = /\.(bmp|gif|jpe?g|png|tiff?|webp)$/i;
+const ZIP_EXTENSION = /\.zip$/i;
 
 const state: {
   settings: Settings;
@@ -104,8 +106,8 @@ app.innerHTML = `
       <section class="control-group upload-group">
         <label class="file-drop" for="image-input">
           <i data-lucide="folder-open"></i>
-          <span>Choose images</span>
-          <input id="image-input" type="file" accept="image/*" multiple />
+          <span>Choose images or ZIPs</span>
+          <input id="image-input" type="file" accept="image/*,.zip,application/zip" multiple />
         </label>
         <div class="file-meta" id="file-meta">No images selected</div>
       </section>
@@ -219,8 +221,12 @@ const controls = {
 };
 
 controls.input.addEventListener("change", async () => {
-  const files = Array.from(controls.input.files ?? []).filter(isSupportedImage);
-  await loadFiles(files);
+  const files = Array.from(controls.input.files ?? []).filter(isSupportedUpload);
+  try {
+    await loadFiles(files);
+  } catch (error) {
+    updateStatus(error instanceof Error ? error.message : "Could not load selected files.");
+  }
 });
 
 for (const element of [
@@ -272,21 +278,33 @@ function mustGet<T extends HTMLElement>(id: string): T {
 }
 
 function isSupportedImage(file: File): boolean {
-  return IMAGE_TYPES.has(file.type) || /\.(bmp|gif|jpe?g|png|tiff?|webp)$/i.test(file.name);
+  return IMAGE_TYPES.has(file.type) || IMAGE_EXTENSIONS.test(file.name);
+}
+
+function isSupportedUpload(file: File): boolean {
+  return isSupportedImage(file) || file.type === "application/zip" || file.type === "application/x-zip-compressed" || ZIP_EXTENSION.test(file.name);
 }
 
 async function loadFiles(files: File[]): Promise<void> {
   if (!files.length) {
-    updateStatus("No supported images selected.");
+    updateStatus("No supported images or ZIP archives selected.");
     return;
   }
 
-  updateStatus(`Loading ${files.length} image${files.length === 1 ? "" : "s"}...`);
+  updateStatus(`Loading ${files.length} file${files.length === 1 ? "" : "s"}...`);
   state.assets.forEach((asset) => asset.bitmap.close());
   state.assets = [];
 
+  const expandedFiles = await expandUploads(files);
+  if (!expandedFiles.length) {
+    updateStatus("No supported images found.");
+    updatePreview();
+    return;
+  }
+
+  updateStatus(`Loading ${expandedFiles.length} image${expandedFiles.length === 1 ? "" : "s"}...`);
   const loaded: Asset[] = [];
-  for (const file of sortFiles(files, state.settings.sort)) {
+  for (const file of sortFiles(expandedFiles, state.settings.sort)) {
     const bitmap = await createImageBitmap(file);
     const canvas = state.settings.trim ? trimTransparentEdges(bitmap) : imageBitmapToCanvas(bitmap);
     bitmap.close();
@@ -304,6 +322,65 @@ async function loadFiles(files: File[]): Promise<void> {
   state.assets = loaded;
   updateStatus(`Loaded ${loaded.length} image${loaded.length === 1 ? "" : "s"}.`);
   await render();
+}
+
+async function expandUploads(files: File[]): Promise<File[]> {
+  const images: File[] = [];
+  let archiveImageCount = 0;
+  const zipFiles = files.filter((file) => !isSupportedImage(file));
+  const JSZip = zipFiles.length ? (await import("jszip")).default : null;
+
+  for (const file of files) {
+    if (isSupportedImage(file)) {
+      images.push(file);
+      continue;
+    }
+
+    if (!JSZip) {
+      continue;
+    }
+    const zip = await JSZip.loadAsync(file);
+    const entries = Object.values(zip.files)
+      .filter((entry) => !entry.dir && IMAGE_EXTENSIONS.test(entry.name))
+      .sort((a, b) => naturalCompare(a.name, b.name));
+
+    for (const entry of entries) {
+      const blob = await entry.async("blob");
+      const imageFile = new File([blob], entry.name, {
+        type: mimeTypeForName(entry.name),
+        lastModified: entry.date?.getTime() ?? file.lastModified
+      });
+      images.push(imageFile);
+      archiveImageCount += 1;
+    }
+  }
+
+  if (archiveImageCount) {
+    updateStatus(`Extracted ${archiveImageCount} image${archiveImageCount === 1 ? "" : "s"} from ZIP archive${files.length === 1 ? "" : "s"}.`);
+  }
+  return images;
+}
+
+function mimeTypeForName(name: string): string {
+  const extension = name.toLowerCase().split(".").pop();
+  switch (extension) {
+    case "bmp":
+      return "image/bmp";
+    case "gif":
+      return "image/gif";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "tif":
+    case "tiff":
+      return "image/tiff";
+    case "webp":
+      return "image/webp";
+    default:
+      return "application/octet-stream";
+  }
 }
 
 function readSettings(): void {

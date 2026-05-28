@@ -10,6 +10,7 @@
     "test:smoke": "playwright test"
   },
   "dependencies": {
+    "jszip": "^3.10.1",
     "lucide": "^0.468.0",
     "pdf-lib": "^1.17.1"
   },

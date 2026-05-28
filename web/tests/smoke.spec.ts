@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import JSZip from "jszip";
 
 function bmpFixture(width: number, height: number, red: number, green: number, blue: number): Buffer {
   const rowSize = Math.ceil((width * 3) / 4) * 4;
@@ -51,4 +52,23 @@ test("renders uploaded images and exports PDF/PNG", async ({ page }) => {
     page.locator("#download-pngs").click()
   ]);
   expect(pngDownload.suggestedFilename()).toBe("cheatsheet-page-1.png");
+});
+
+test("extracts images from ZIP uploads", async ({ page }) => {
+  const zip = new JSZip();
+  zip.file("week-1/1.bmp", bmpFixture(24, 18, 220, 70, 70), { date: new Date("2026-01-01T00:00:00Z") });
+  zip.file("week-1/2.bmp", bmpFixture(20, 26, 55, 140, 90), { date: new Date("2026-01-02T00:00:00Z") });
+  zip.file("readme.txt", "not an image");
+  const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+
+  await page.goto("/");
+  await page.setInputFiles("#image-input", {
+    name: "notes.zip",
+    mimeType: "application/zip",
+    buffer: zipBuffer
+  });
+
+  await expect(page.locator(".page-preview canvas")).toHaveCount(2);
+  await expect(page.locator("#file-meta")).toHaveText("2 images selected");
+  await expect(page.locator("#download-pdf")).toBeEnabled();
 });

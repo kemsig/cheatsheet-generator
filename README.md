@@ -11,7 +11,7 @@ The project has two ways to use it:
 
 ## Browser App
 
-The web app runs entirely in the browser. It can upload images, sort them, choose paper/page/layout settings, preview the pages, and download a PDF or PNG page previews.
+The web app runs entirely in the browser. It can upload images or ZIP archives of images, sort them, choose paper/page/layout settings, preview the pages, and download a PDF or PNG page previews.
 
 ```bash
 cd web
